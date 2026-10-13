@@ -774,4 +774,8 @@ Estos datos de ubicación pueden ser utilizados para fines como aparecer en un m
     <string name="sync_time_not_sent">No enviado: radio desconectada o cola llena</string>
     <string name="sync_time_no_position">Tu nodo no tiene una posición válida</string>
     <string name="sync_time_location_disabled">Compartir ubicación está desactivado</string>
+    <string name="modified_version">Versión modificada</string>
+    <string name="modified_version_notice">Esta compilación es una versión modificada de Meshtastic-Android, cambiada por SirMelendezTech. No está afiliada ni respaldada por Meshtastic LLC.</string>
+    <string name="modified_version_changes">2026-10-13: se añadió «Sincronizar hora» al detalle de los nodos remotos.</string>
+    <string name="modified_version_source">Código fuente de esta versión</string>
 </resources>

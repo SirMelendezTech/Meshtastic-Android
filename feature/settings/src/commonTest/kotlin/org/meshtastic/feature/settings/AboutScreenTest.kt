@@ -114,4 +114,32 @@ class AboutScreenTest {
 
         assertEquals(listOf("https://www.gnu.org/licenses/gpl-3.0.html"), openedUris)
     }
+
+    @Test
+    fun `modified version notice says what changed and links to this fork's source`() = runComposeUiTest {
+        val openedUris = mutableListOf<String>()
+        val uriHandler =
+            object : UriHandler {
+                override fun openUri(uri: String) {
+                    openedUris += uri
+                }
+            }
+
+        setContent {
+            CompositionLocalProvider(LocalUriHandler provides uriHandler) {
+                AppTheme { AboutScreen(appVersionName = "2.5.0", onNavigateUp = {}, onNavigateToAcknowledgements = {}) }
+            }
+        }
+
+        onNodeWithText("Modified version").performScrollTo().assertIsDisplayed()
+        onNodeWithText("2026-10-13: added “Sync time” to the details of remote nodes.")
+            .performScrollTo()
+            .assertIsDisplayed()
+        // The upstream copyright notice must stay alongside the modification notice.
+        onNodeWithText("Meshtastic® Copyright Meshtastic LLC").performScrollTo().assertIsDisplayed()
+
+        onNodeWithText("Source code of this version").performScrollTo().performClick()
+
+        assertEquals(listOf("https://github.com/SirMelendezTech/Meshtastic-Android"), openedUris)
+    }
 }

@@ -1200,6 +1200,10 @@
     <string name="min">Min</string>
     <string name="minimum_wake_time_seconds">Minimum wake time</string>
     <string name="modem_preset">Presets</string>
+    <string name="modified_version">Modified version</string>
+    <string name="modified_version_changes">2026-10-13: added “Sync time” to the details of remote nodes.</string>
+    <string name="modified_version_notice">This build is a modified version of Meshtastic-Android, changed by SirMelendezTech. It is not affiliated with or endorsed by Meshtastic LLC.</string>
+    <string name="modified_version_source">Source code of this version</string>
     <string name="module_settings">Module configuration</string>
     <string name="modules_already_unlocked">Modules already unlocked</string>
     <string name="modules_unlocked">Modules unlocked</string>

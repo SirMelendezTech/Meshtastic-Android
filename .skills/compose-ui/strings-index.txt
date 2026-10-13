@@ -1158,6 +1158,10 @@ micrograms_per_cubic_meter
 min
 minimum_wake_time_seconds
 modem_preset
+modified_version
+modified_version_changes
+modified_version_notice
+modified_version_source
 module_settings
 modules_already_unlocked
 modules_unlocked
