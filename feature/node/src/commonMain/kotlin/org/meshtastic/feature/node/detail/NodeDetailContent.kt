@@ -128,6 +128,7 @@ fun NodeDetailList(
                 isLocal = uiState.metricsState.isLocal,
                 hasConversation = uiState.hasConversation,
                 airQualityHistory = uiState.metricsState.airQualityMetrics,
+                syncTime = uiState.syncTime,
             )
         }
         item { NotesSection(node = node, onSaveNotes = onSaveNotes) }

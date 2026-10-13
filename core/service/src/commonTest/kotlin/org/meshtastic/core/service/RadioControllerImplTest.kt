@@ -71,6 +71,8 @@ import org.meshtastic.core.repository.RadioInterfaceService
 import org.meshtastic.core.repository.RadioSessionContext
 import org.meshtastic.core.repository.RadioSessionLease
 import org.meshtastic.core.repository.ServiceRepository
+import org.meshtastic.core.repository.TimeSyncBlocker
+import org.meshtastic.core.repository.TimeSyncResult
 import org.meshtastic.core.repository.UiPrefs
 import org.meshtastic.proto.AdminMessage
 import org.meshtastic.proto.Channel
@@ -446,6 +448,60 @@ class RadioControllerImplTest {
 
         assertSame(rejection, failure)
         verify(exactly(0)) { nodeManager.handleReceivedPosition(any(), any(), any(), any(), any()) }
+    }
+
+    private fun givenOurNode(latitudeI: Int?, longitudeI: Int?, shareLocation: Boolean = true) {
+        every { uiPrefs.shouldProvideNodeLocation(1234) } returns MutableStateFlow(shareLocation)
+        val position =
+            org.meshtastic.proto.Position.Builder()
+                .also { wb ->
+                    wb.latitude_i = latitudeI
+                    wb.longitude_i = longitudeI
+                    wb.altitude = 30
+                }
+                .build()
+        every { nodeManager.nodeDBbyNodeNum } returns mapOf(1234 to Node(num = 1234, position = position))
+    }
+
+    @Test
+    fun syncTimeSendsOurNodePositionAndReturnsTheResult() = runTest {
+        val controller = createController(scope = backgroundScope)
+        givenOurNode(latitudeI = 10_000_000, longitudeI = 20_000_000)
+        val sentPositions = mutableListOf<Position>()
+        everySuspend { commandSender.syncTime(123, capture(sentPositions), any()) } returns TimeSyncResult.Synced
+
+        assertNull(controller.syncTimeBlocker(123))
+        assertEquals(TimeSyncResult.Synced, controller.syncTime(123))
+        assertEquals(1.0, sentPositions.single().latitude)
+        assertEquals(2.0, sentPositions.single().longitude)
+    }
+
+    @Test
+    fun syncTimeIsBlockedWithoutAValidPosition() = runTest {
+        val controller = createController(scope = backgroundScope)
+        givenOurNode(latitudeI = null, longitudeI = null)
+
+        assertEquals(TimeSyncBlocker.NO_VALID_POSITION, controller.syncTimeBlocker(123))
+        assertEquals(TimeSyncResult.Blocked(TimeSyncBlocker.NO_VALID_POSITION), controller.syncTime(123))
+        verifySuspend(exactly(0)) { commandSender.syncTime(any(), any(), any()) }
+    }
+
+    @Test
+    fun syncTimeIsBlockedWhenLocationSharingIsOff() = runTest {
+        val controller = createController(scope = backgroundScope)
+        givenOurNode(latitudeI = 10_000_000, longitudeI = 20_000_000, shareLocation = false)
+
+        assertEquals(TimeSyncResult.Blocked(TimeSyncBlocker.LOCATION_SHARING_DISABLED), controller.syncTime(123))
+        verifySuspend(exactly(0)) { commandSender.syncTime(any(), any(), any()) }
+    }
+
+    @Test
+    fun syncTimeIsBlockedForOurOwnNode() = runTest {
+        val controller = createController(scope = backgroundScope)
+        givenOurNode(latitudeI = 10_000_000, longitudeI = 20_000_000)
+
+        assertEquals(TimeSyncResult.Blocked(TimeSyncBlocker.OWN_NODE), controller.syncTime(1234))
+        verifySuspend(exactly(0)) { commandSender.syncTime(any(), any(), any()) }
     }
 
     @Test

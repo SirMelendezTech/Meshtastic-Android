@@ -34,6 +34,15 @@ interface QueryController {
     /** Requests the current GPS position from a remote node. */
     suspend fun requestPosition(destNum: Int, currentPosition: Position)
 
+    /** Returns why a time sync to [destNum] cannot be sent right now, or null when it can. */
+    fun syncTimeBlocker(destNum: Int): TimeSyncBlocker?
+
+    /**
+     * Sends the phone's current time to [destNum] together with our node's position, and waits for the destination's
+     * acknowledgement. Returns [TimeSyncResult.Blocked] without sending when [syncTimeBlocker] reports a blocker.
+     */
+    suspend fun syncTime(destNum: Int): TimeSyncResult
+
     /** Requests detailed user info from a remote node. */
     suspend fun requestUserInfo(destNum: Int)
 

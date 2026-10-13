@@ -36,6 +36,8 @@ sealed class NodeMenuAction {
 
     data class RequestPosition(val node: Node) : NodeMenuAction()
 
+    data class SyncTime(val node: Node) : NodeMenuAction()
+
     data class RequestTelemetry(val node: Node, val type: TelemetryType) : NodeMenuAction()
 
     data class TraceRoute(val node: Node) : NodeMenuAction()

@@ -16,6 +16,7 @@
  */
 package org.meshtastic.core.testing
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
@@ -28,6 +29,8 @@ import org.meshtastic.core.repository.ConnectionStateHolder
 import org.meshtastic.core.repository.EditSettingsTransactionException
 import org.meshtastic.core.repository.PacketQueueRejectedException
 import org.meshtastic.core.repository.RadioController
+import org.meshtastic.core.repository.TimeSyncBlocker
+import org.meshtastic.core.repository.TimeSyncResult
 import org.meshtastic.proto.Channel
 import org.meshtastic.proto.ClientNotification
 import org.meshtastic.proto.Config
@@ -421,6 +424,27 @@ class FakeRadioController :
     override suspend fun removeByNodenum(packetId: Int, nodeNum: Int) {}
 
     override suspend fun requestPosition(destNum: Int, currentPosition: Position) {}
+
+    /** Returned by [syncTimeBlocker]; null means a time sync may be sent. */
+    var syncTimeBlockerResult: TimeSyncBlocker? = null
+
+    /** Returned by [syncTime] when no blocker is set. */
+    var syncTimeResult: TimeSyncResult = TimeSyncResult.Synced
+
+    /** Suspends [syncTime] until completed, letting tests observe the in-flight state. */
+    var syncTimeGate: CompletableDeferred<Unit>? = null
+    val syncTimeCalls = mutableListOf<Int>()
+
+    override fun syncTimeBlocker(destNum: Int): TimeSyncBlocker? = syncTimeBlockerResult
+
+    override suspend fun syncTime(destNum: Int): TimeSyncResult {
+        syncTimeCalls += destNum
+        syncTimeBlockerResult?.let {
+            return TimeSyncResult.Blocked(it)
+        }
+        syncTimeGate?.await()
+        return syncTimeResult
+    }
 
     override suspend fun requestUserInfo(destNum: Int) {}
 

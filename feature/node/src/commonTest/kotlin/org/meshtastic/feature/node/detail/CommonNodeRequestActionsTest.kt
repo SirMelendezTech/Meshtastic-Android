@@ -16,20 +16,32 @@
  */
 package org.meshtastic.feature.node.detail
 
+import dev.mokkery.MockMode
 import dev.mokkery.answering.returns
 import dev.mokkery.answering.throws
 import dev.mokkery.every
 import dev.mokkery.everySuspend
 import dev.mokkery.mock
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.meshtastic.core.repository.LocalNodeUnavailableException
 import org.meshtastic.core.repository.PacketQueueRejectedException
 import org.meshtastic.core.repository.PlatformAnalytics
 import org.meshtastic.core.repository.RadioController
+import org.meshtastic.core.repository.TimeSyncBlocker
+import org.meshtastic.core.repository.TimeSyncResult
+import org.meshtastic.core.testing.FakeApplicationCoroutineScope
+import org.meshtastic.core.testing.FakeRadioController
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.time.Duration.Companion.seconds
 
 class CommonNodeRequestActionsTest {
     private val radioController: RadioController = mock()
@@ -39,6 +51,7 @@ class CommonNodeRequestActionsTest {
             radioController = radioController,
             snackbarManager = snackbarManager,
             analytics = mock<PlatformAnalytics>(),
+            applicationScope = FakeApplicationCoroutineScope(UnconfinedTestDispatcher()),
             resolveUiText = resolveNodeRequestFailureUiText,
         )
 
@@ -78,5 +91,89 @@ class CommonNodeRequestActionsTest {
 
         assertEquals(emptyMap(), actions.lastRequestNeighborTimes.value)
         assertEquals(listOf(NODE_REQUEST_SEND_FAILED_TEXT), snackbarManager.messages)
+    }
+
+    private val fakeRadio = FakeRadioController()
+
+    private fun TestScope.syncTimeActions() = CommonNodeRequestActions(
+        radioController = fakeRadio,
+        snackbarManager = snackbarManager,
+        analytics = mock<PlatformAnalytics>(MockMode.autofill),
+        applicationScope = FakeApplicationCoroutineScope(StandardTestDispatcher(testScheduler)),
+        resolveUiText = resolveNodeRequestFailureUiText,
+    )
+
+    @Test
+    fun `sync time is sending until the result arrives and then shows it`() = runTest {
+        val actions = syncTimeActions()
+        fakeRadio.syncTimeGate = CompletableDeferred()
+
+        actions.syncTime(1234)
+        runCurrent()
+
+        assertEquals(SyncTimeState.Sending, actions.syncTimeStates.value[1234])
+
+        fakeRadio.syncTimeGate?.complete(Unit)
+        runCurrent()
+
+        assertEquals(SyncTimeState.Finished(TimeSyncResult.Synced), actions.syncTimeStates.value[1234])
+    }
+
+    @Test
+    fun `sync time ignores a second tap while one is in flight`() = runTest {
+        val actions = syncTimeActions()
+        fakeRadio.syncTimeGate = CompletableDeferred()
+
+        actions.syncTime(1234)
+        actions.syncTime(1234)
+        runCurrent()
+
+        assertEquals(listOf(1234), fakeRadio.syncTimeCalls)
+    }
+
+    @Test
+    fun `sync time failure stays visible for a while and then clears`() = runTest {
+        val actions = syncTimeActions()
+        fakeRadio.syncTimeResult = TimeSyncResult.Nak(routingError = 5)
+
+        actions.syncTime(1234)
+        runCurrent()
+
+        assertEquals(SyncTimeState.Finished(TimeSyncResult.Nak(5)), actions.syncTimeStates.value[1234])
+
+        advanceTimeBy(31.seconds)
+
+        assertNull(actions.syncTimeStates.value[1234])
+    }
+
+    @Test
+    fun `sync time reports a blocker without sending`() = runTest {
+        val actions = syncTimeActions()
+        fakeRadio.syncTimeBlockerResult = TimeSyncBlocker.NO_VALID_POSITION
+
+        actions.syncTime(1234)
+        runCurrent()
+
+        assertEquals(
+            SyncTimeState.Finished(TimeSyncResult.Blocked(TimeSyncBlocker.NO_VALID_POSITION)),
+            actions.syncTimeStates.value[1234],
+        )
+    }
+
+    @Test
+    fun `retrying after a result starts a new attempt`() = runTest {
+        val actions = syncTimeActions()
+        fakeRadio.syncTimeResult = TimeSyncResult.TimedOut
+        actions.syncTime(1234)
+        runCurrent()
+
+        advanceTimeBy(15.seconds)
+        fakeRadio.syncTimeResult = TimeSyncResult.Synced
+        actions.syncTime(1234)
+        runCurrent()
+        advanceTimeBy(16.seconds) // past the first attempt's expiry, which must not clear the second result
+
+        assertEquals(listOf(1234, 1234), fakeRadio.syncTimeCalls)
+        assertEquals(SyncTimeState.Finished(TimeSyncResult.Synced), actions.syncTimeStates.value[1234])
     }
 }

@@ -18,9 +18,14 @@ package org.meshtastic.core.data.manager
 
 import co.touchlab.kermit.Logger
 import kotlinx.atomicfu.atomic
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.withTimeoutOrNull
 import okio.ByteString
 import okio.ByteString.Companion.toByteString
 import org.koin.core.annotation.Single
@@ -42,6 +47,7 @@ import org.meshtastic.core.repository.PacketHandler
 import org.meshtastic.core.repository.PacketQueueRejectedException
 import org.meshtastic.core.repository.RadioConfigRepository
 import org.meshtastic.core.repository.SessionManager
+import org.meshtastic.core.repository.TimeSyncResult
 import org.meshtastic.core.repository.TracerouteHandler
 import org.meshtastic.core.repository.toFixedPositionAdminMessage
 import org.meshtastic.core.repository.toFixedPositionProto
@@ -66,6 +72,7 @@ import org.meshtastic.proto.Telemetry
 import org.meshtastic.proto.ToRadio
 import kotlin.math.absoluteValue
 import kotlin.random.Random
+import kotlin.time.Duration
 import org.meshtastic.proto.Position as ProtoPosition
 
 @Suppress("TooManyFunctions", "CyclomaticComplexMethod", "LongParameterList")
@@ -301,6 +308,64 @@ class CommandSenderImpl(
             ),
             "Position request",
         )
+    }
+
+    override suspend fun syncTime(destNum: Int, position: Position, timeout: Duration): TimeSyncResult {
+        require(position.isValid()) { "Time sync needs a valid position; 0,0 would overwrite our own" }
+        val packetId = generatePacketId()
+        val meshPosition =
+            ProtoPosition.Builder()
+                .also { wb ->
+                    wb.latitude_i = Position.degI(position.latitude)
+                    wb.longitude_i = Position.degI(position.longitude)
+                    wb.altitude = position.altitude
+                    wb.time = (nowMillis / TimeConstants.MS_PER_SEC).toInt()
+                    // Firmware only takes the time from a mesh position whose source is at least LOC_INTERNAL.
+                    wb.location_source = ProtoPosition.LocSource.LOC_EXTERNAL
+                }
+                .build()
+        // Firmware only takes the time from a position heard on the primary channel, so never use the PKC/node channel.
+        val packet =
+            buildMeshPacket(
+                to = destNum,
+                wantAck = true,
+                id = packetId,
+                channel = 0,
+                priority = MeshPacket.Priority.RELIABLE,
+                decoded =
+                Data.Builder()
+                    .also { wb ->
+                        wb.portnum = PortNum.POSITION_APP
+                        wb.payload = meshPosition.encode().toByteString()
+                        wb.want_response = false
+                    }
+                    .build(),
+            )
+        return coroutineScope {
+            // Subscribe before sending so an immediate ACK cannot slip past. Only the destination's own ACK proves
+            // delivery; ACKs from relays or our own radio are not final, while any NAK is.
+            val answer =
+                async(start = CoroutineStart.UNDISPATCHED) {
+                    packetHandler.routingResults.first { result ->
+                        result.requestId == packetId && (!result.isAck || result.from == destNum)
+                    }
+                }
+            if (!packetHandler.sendToRadio(packet)) {
+                answer.cancel()
+                return@coroutineScope TimeSyncResult.NotSent
+            }
+            val result = withTimeoutOrNull(timeout) { answer.await() }
+            when {
+                result == null -> {
+                    answer.cancel()
+                    TimeSyncResult.TimedOut
+                }
+
+                result.isAck -> TimeSyncResult.Synced
+
+                else -> TimeSyncResult.Nak(result.errorReason)
+            }
+        }
     }
 
     override suspend fun setFixedPosition(destNum: Int, pos: Position) {

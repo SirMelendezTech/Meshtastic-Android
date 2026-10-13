@@ -1844,6 +1844,16 @@
     <string name="swipe_action_delete">Delete</string>
     <string name="swipe_action_mute">Mute</string>
     <string name="swipe_action_unmute">Unmute</string>
+    <!-- SYNC -->
+    <string name="sync_time">Sync time</string>
+    <string name="sync_time_description">Sends your phone's time with your node's position. A check mark confirms delivery, not that the node applied the time.</string>
+    <string name="sync_time_failed">Failed: %1$s</string>
+    <string name="sync_time_location_disabled">Location sharing is turned off</string>
+    <string name="sync_time_no_position">Your node has no valid position</string>
+    <string name="sync_time_not_sent">Not sent: radio disconnected or queue full</string>
+    <string name="sync_time_sending">Sending…</string>
+    <string name="sync_time_synced">Time synced</string>
+    <string name="sync_time_timed_out">No confirmation (timeout)</string>
     <string name="system_settings">System Settings</string>
     <!-- TAK -->
     <string name="tak">TAK (ATAK)</string>

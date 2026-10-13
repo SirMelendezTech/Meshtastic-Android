@@ -47,14 +47,17 @@ import org.meshtastic.core.repository.LocalNodeUnavailableException
 import org.meshtastic.core.repository.PacketQueueRejectedException
 import org.meshtastic.core.repository.PacketRepository
 import org.meshtastic.core.repository.QueryController
+import org.meshtastic.core.repository.TimeSyncBlocker
 import org.meshtastic.feature.node.component.NodeMenuAction
 import org.meshtastic.feature.node.domain.usecase.GetNodeDetailsUseCase
+import org.meshtastic.feature.node.model.MetricsState
 import org.meshtastic.proto.User
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class NodeDetailViewModelTest {
@@ -69,6 +72,7 @@ class NodeDetailViewModelTest {
     private val ensureRemoteAdminSession: EnsureRemoteAdminSessionUseCase = mock()
     private val observeRemoteAdminSessionStatus: ObserveRemoteAdminSessionStatusUseCase = mock()
     private val snackbarManager = RecordingSnackbarManager()
+    private val syncTimeStates = MutableStateFlow<Map<Int, SyncTimeState>>(emptyMap())
 
     @BeforeTest
     fun setUp() {
@@ -77,6 +81,8 @@ class NodeDetailViewModelTest {
         every { getNodeDetailsUseCase(any()) } returns emptyFlow()
         every { packetRepository.getContacts() } returns flowOf(emptyMap())
         every { observeRemoteAdminSessionStatus(any()) } returns flowOf(SessionStatus.NoSession)
+        every { nodeRequestActions.syncTimeStates } returns syncTimeStates
+        every { queryController.syncTimeBlocker(any()) } returns null
         snackbarManager.messages.clear()
         viewModel = createViewModel(1234)
     }
@@ -118,6 +124,44 @@ class NodeDetailViewModelTest {
             assertEquals(1234, state.node?.num)
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun `uiState carries this node's sync time progress and blocker`() = runTest(testDispatcher) {
+        val node = Node(num = 1234, user = User.Builder().also { wb -> wb.id = "!1234" }.build())
+        every { getNodeDetailsUseCase(1234) } returns MutableStateFlow(NodeDetailUiState(node = node))
+        every { queryController.syncTimeBlocker(1234) } returns TimeSyncBlocker.NO_VALID_POSITION
+        syncTimeStates.value = mapOf(1234 to SyncTimeState.Sending, 99 to SyncTimeState.Sending)
+
+        createViewModel(1234).uiState.test {
+            assertEquals(
+                SyncTimeUiState(blocker = TimeSyncBlocker.NO_VALID_POSITION, state = SyncTimeState.Sending),
+                awaitItem().syncTime,
+            )
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `uiState has no sync time for our own node`() = runTest(testDispatcher) {
+        val node = Node(num = 1234, user = User.Builder().also { wb -> wb.id = "!1234" }.build())
+        val local = NodeDetailUiState(node = node, metricsState = MetricsState(isLocal = true))
+        every { getNodeDetailsUseCase(1234) } returns MutableStateFlow(local)
+
+        createViewModel(1234).uiState.test {
+            assertNull(awaitItem().syncTime)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `handleNodeMenuAction delegates SyncTime to nodeRequestActions`() = runTest(testDispatcher) {
+        val node = Node(num = 1234, user = User.Builder().also { wb -> wb.id = "!1234" }.build())
+        every { nodeRequestActions.syncTime(any()) } returns Unit
+
+        viewModel.handleNodeMenuAction(NodeMenuAction.SyncTime(node))
+
+        verify { nodeRequestActions.syncTime(1234) }
     }
 
     @Test

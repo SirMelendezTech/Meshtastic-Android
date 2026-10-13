@@ -50,6 +50,7 @@ import org.jetbrains.compose.resources.vectorResource
 import org.meshtastic.core.common.util.MeasurementSystem
 import org.meshtastic.core.model.Node
 import org.meshtastic.core.model.TelemetryType
+import org.meshtastic.core.repository.TimeSyncBlocker
 import org.meshtastic.core.resources.Res
 import org.meshtastic.core.resources.ic_air
 import org.meshtastic.core.resources.ic_person
@@ -63,6 +64,7 @@ import org.meshtastic.core.resources.telemetry
 import org.meshtastic.core.resources.userinfo
 import org.meshtastic.core.ui.icon.MeshtasticIcons
 import org.meshtastic.core.ui.icon.Refresh
+import org.meshtastic.feature.node.detail.SyncTimeUiState
 import org.meshtastic.feature.node.model.LogsType
 import org.meshtastic.feature.node.model.NodeDetailAction
 import org.meshtastic.proto.Telemetry
@@ -91,6 +93,7 @@ internal fun TelemetricActionsSection(
     onAction: (NodeDetailAction) -> Unit,
     isLocal: Boolean = false,
     airQualityHistory: List<Telemetry> = emptyList(),
+    syncTime: SyncTimeUiState? = null,
 ) {
     val features =
         rememberTelemetricFeatures(
@@ -120,6 +123,14 @@ internal fun TelemetricActionsSection(
                     onAction = onAction,
                 )
             }
+        // Sits right after the position row, next to "Exchange position"; never shown for our own node.
+        if (!isLocal && syncTime != null && syncTime.blocker != TimeSyncBlocker.OWN_NODE) {
+            SectionDivider()
+            SyncTimeRow(
+                syncTime = syncTime,
+                onSyncTime = { onAction(NodeDetailAction.HandleNodeMenuAction(NodeMenuAction.SyncTime(node))) },
+            )
+        }
     }
 }
 
