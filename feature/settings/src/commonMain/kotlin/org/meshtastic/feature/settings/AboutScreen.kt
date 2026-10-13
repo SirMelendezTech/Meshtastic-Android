@@ -62,6 +62,10 @@ import org.meshtastic.core.resources.documentation
 import org.meshtastic.core.resources.github_repository
 import org.meshtastic.core.resources.license
 import org.meshtastic.core.resources.license_notice
+import org.meshtastic.core.resources.modified_version
+import org.meshtastic.core.resources.modified_version_changes
+import org.meshtastic.core.resources.modified_version_notice
+import org.meshtastic.core.resources.modified_version_source
 import org.meshtastic.core.resources.need_hardware
 import org.meshtastic.core.resources.need_hardware_description
 import org.meshtastic.core.resources.project_information
@@ -91,6 +95,7 @@ private const val GITHUB_REPO_URL = "https://github.com/meshtastic/Meshtastic-An
 private const val WEBSITE_URL = "https://meshtastic.org"
 private const val DOCS_URL = "https://meshtastic.org/docs/getting-started"
 private const val LICENSE_URL = "https://www.gnu.org/licenses/gpl-3.0.html"
+private const val MODIFIED_SOURCE_URL = "https://github.com/SirMelendezTech/Meshtastic-Android"
 
 private data class PopularDevice(val name: String, val svgFileName: String)
 
@@ -152,6 +157,7 @@ fun AboutScreen(
                 onOpenDocs = { uriHandler.openUri(DOCS_URL) },
                 onOpenLicense = { uriHandler.openUri(LICENSE_URL) },
             )
+            ModifiedVersionSection(onOpenSource = { uriHandler.openUri(MODIFIED_SOURCE_URL) })
             CopyrightFooter()
         }
     }
@@ -225,6 +231,32 @@ private fun ProjectInformationSection(
             leadingIcon = MeshtasticIcons.Notes,
             trailingIcon = MeshtasticIcons.ChevronRight,
             onClick = onOpenLicense,
+        )
+    }
+}
+
+// GPL section 5(a): a modified version must say prominently that it was modified, by whom and when, and section 6
+// asks for its source to be offered. Add a line to modified_version_changes for every change shipped in this fork.
+@Composable
+private fun ModifiedVersionSection(onOpenSource: () -> Unit, modifier: Modifier = Modifier) {
+    ExpressiveSection(title = stringResource(Res.string.modified_version), modifier = modifier) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = stringResource(Res.string.modified_version_notice),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = stringResource(Res.string.modified_version_changes),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        ListItem(
+            text = stringResource(Res.string.modified_version_source),
+            leadingIcon = MeshtasticIcons.Code,
+            trailingIcon = MeshtasticIcons.ChevronRight,
+            onClick = onOpenSource,
         )
     }
 }
