@@ -60,6 +60,7 @@ import org.meshtastic.core.ui.icon.QrCode2
 import org.meshtastic.core.ui.icon.VolumeMute
 import org.meshtastic.core.ui.icon.VolumeOff
 import org.meshtastic.core.ui.icon.VolumeUp
+import org.meshtastic.feature.node.detail.SyncTimeUiState
 import org.meshtastic.feature.node.model.LogsType
 import org.meshtastic.feature.node.model.NodeDetailAction
 import org.meshtastic.feature.node.model.showsDirectMessageAction
@@ -80,6 +81,7 @@ fun DeviceActions(
     hasConversation: Boolean = false,
     airQualityHistory: List<Telemetry> = emptyList(),
     trackedInLiveUpdate: Boolean? = null,
+    syncTime: SyncTimeUiState? = null,
 ) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SectionCard(title = Res.string.actions) {
@@ -107,6 +109,7 @@ fun DeviceActions(
             onAction = onAction,
             isLocal = isLocal,
             airQualityHistory = airQualityHistory,
+            syncTime = syncTime,
         )
     }
 }

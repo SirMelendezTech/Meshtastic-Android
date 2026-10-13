@@ -16,6 +16,8 @@
  */
 package org.meshtastic.core.repository
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import org.meshtastic.proto.MeshPacket
 import org.meshtastic.proto.QueueStatus
 import org.meshtastic.proto.ToRadio
@@ -85,6 +87,17 @@ interface PacketHandler {
      * NAK from any node ends it. A null [from] is treated as the destination.
      */
     suspend fun completeDispatchedResponse(dataRequestId: Int, complete: Boolean, from: Int? = null)
+
+    /**
+     * Hot stream of every routing ACK/NAK received from the radio, including the sender, so a caller can wait for the
+     * addressed node's own acknowledgement rather than the first one (which may come from a relay or our own node).
+     * Subscribe before sending the packet being tracked; there is no replay.
+     */
+    val routingResults: Flow<RoutingResult>
+        get() = emptyFlow()
+
+    /** Publishes [result] to [routingResults]. Called by the routing packet handler for each decoded ACK/NAK. */
+    fun publishRoutingResult(result: RoutingResult) {}
 
     /** Stops the packet queue. */
     fun stopPacketQueue()

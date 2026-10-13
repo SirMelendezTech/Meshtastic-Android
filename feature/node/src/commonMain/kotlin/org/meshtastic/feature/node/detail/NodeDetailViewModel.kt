@@ -99,6 +99,8 @@ data class NodeDetailUiState(
      * conversation instead of the thread the message action was kept visible for.
      */
     val existingContactKey: String? = null,
+    /** "Sync time" action for a remote node; null for our own node. */
+    val syncTime: SyncTimeUiState? = null,
 ) {
     /** True when a direct-message thread with this node already exists, keyed either legacy or PKI. */
     val hasConversation: Boolean
@@ -169,16 +171,25 @@ class NodeDetailViewModel(
                         sessionStatusFlow,
                         isEnsuringSession,
                         existingContactKeyFlow(nodeId),
-                    ) { base, sessionStatus, ensuring, existingContactKey ->
+                        nodeRequestActions.syncTimeStates.map { it[nodeId] }.distinctUntilChanged(),
+                    ) { base, sessionStatus, ensuring, existingContactKey, syncTimeState ->
                         base.copy(
                             sessionStatus = sessionStatus,
                             isEnsuringSession = ensuring,
                             existingContactKey = existingContactKey,
+                            syncTime = syncTimeUiState(nodeId, base.metricsState.isLocal, syncTimeState),
                         )
                     }
                 }
             }
             .stateInWhileSubscribed(initialValue = NodeDetailUiState())
+
+    /**
+     * Re-evaluated on every detail emission, which includes changes to our own node's position. The blocker is a
+     * snapshot; [QueryController.syncTime] re-checks it before sending.
+     */
+    private fun syncTimeUiState(nodeId: Int, isLocal: Boolean, state: SyncTimeState?): SyncTimeUiState? =
+        if (isLocal) null else SyncTimeUiState(blocker = queryController.syncTimeBlocker(nodeId), state = state)
 
     fun start(nodeId: Int) {
         if (manualNodeId.value != nodeId) {
@@ -212,6 +223,8 @@ class NodeDetailViewModel(
                 safeLaunch(tag = "requestPosition") {
                     nodeRequestActions.requestPosition(action.node.num, action.node.effectiveLongName)
                 }
+
+            is NodeMenuAction.SyncTime -> nodeRequestActions.syncTime(action.node.num)
 
             is NodeMenuAction.RequestTelemetry ->
                 safeLaunch(tag = "requestTelemetry") {

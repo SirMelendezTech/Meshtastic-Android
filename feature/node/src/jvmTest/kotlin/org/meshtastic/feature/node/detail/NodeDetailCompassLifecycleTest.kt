@@ -181,8 +181,9 @@ class NodeDetailCompassLifecycleTest {
         return NodeDetailViewModel(
             savedStateHandle = SavedStateHandle(),
             nodeManagementActions = mock<NodeManagementActions>(),
-            nodeRequestActions = mock<NodeRequestActions>(),
-            queryController = mock<QueryController>(),
+            nodeRequestActions =
+            mock<NodeRequestActions> { every { syncTimeStates } returns MutableStateFlow(emptyMap()) },
+            queryController = mock<QueryController> { every { syncTimeBlocker(any()) } returns null },
             getNodeDetailsUseCase = getNodeDetailsUseCase,
             packetRepository = packetRepository,
             ensureRemoteAdminSession = mock<EnsureRemoteAdminSessionUseCase>(),

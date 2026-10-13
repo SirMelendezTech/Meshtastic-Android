@@ -138,6 +138,7 @@ fun NodeDetailList(
                 hasConversation = uiState.hasConversation,
                 airQualityHistory = uiState.metricsState.airQualityMetrics,
                 trackedInLiveUpdate = trackedInLiveUpdate,
+                syncTime = uiState.syncTime,
             )
         }
         item { DisplayNameSection(node = node, onSaveDisplayName = onSaveDisplayName) }

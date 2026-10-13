@@ -65,6 +65,7 @@ import org.meshtastic.core.repository.RadioConfigRepository
 import org.meshtastic.core.repository.RadioInterfaceService
 import org.meshtastic.core.repository.RadioSessionContext
 import org.meshtastic.core.repository.RemoteShellHandler
+import org.meshtastic.core.repository.RoutingResult
 import org.meshtastic.core.repository.ServiceStateWriter
 import org.meshtastic.core.repository.StoreForwardPacketHandler
 import org.meshtastic.core.repository.TelemetryPacketHandler
@@ -388,6 +389,13 @@ class MeshDataHandlerImpl(
                 serviceStateWriter.setErrorMessage(getStringSuspend(Res.string.error_duty_cycle), Severity.Warn)
             }
         }
+        packetHandler.publishRoutingResult(
+            RoutingResult(
+                requestId = packet.decoded?.request_id ?: 0,
+                from = packet.from,
+                errorReason = r.error_reason?.value ?: 0,
+            ),
+        )
         handleAckNak(
             packet.decoded?.request_id ?: 0,
             packet.from,

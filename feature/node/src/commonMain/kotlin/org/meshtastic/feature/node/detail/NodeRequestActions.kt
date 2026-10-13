@@ -25,6 +25,9 @@ interface NodeRequestActions {
     val lastTracerouteTime: StateFlow<Long?>
     val lastRequestNeighborTimes: StateFlow<Map<Int, Long>>
 
+    /** Per-node progress of "Sync time", keyed by node number. Outlives the screen that started it. */
+    val syncTimeStates: StateFlow<Map<Int, SyncTimeState>>
+
     suspend fun requestUserInfo(destNum: Int, longName: String)
 
     suspend fun requestNeighborInfo(destNum: Int, longName: String)
@@ -34,4 +37,7 @@ interface NodeRequestActions {
     suspend fun requestTelemetry(destNum: Int, longName: String, type: TelemetryType)
 
     suspend fun requestTraceroute(destNum: Int, longName: String)
+
+    /** Sends our time to [destNum] and tracks the result in [syncTimeStates]; ignored while one is in flight. */
+    fun syncTime(destNum: Int)
 }
