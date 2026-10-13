@@ -20,6 +20,7 @@ import org.meshtastic.core.model.DataPacket
 import org.meshtastic.proto.AdminMessage
 import org.meshtastic.proto.ChannelSet
 import org.meshtastic.proto.LocalConfig
+import kotlin.time.Duration
 import org.meshtastic.core.model.Position as ModelPosition
 import org.meshtastic.proto.Position as ProtoPosition
 
@@ -110,6 +111,13 @@ interface CommandSender {
 
     /** Requests the position of a specific node, or throws if the outbound queue rejects it. */
     suspend fun requestPosition(destNum: Int, currentPosition: ModelPosition)
+
+    /**
+     * Sends [position] stamped with the current time to [destNum] on the primary channel, marked as an external
+     * location source so the receiver's firmware may set its clock from it. Requests an ACK (no response) and waits up
+     * to [timeout] for the destination's own ACK or any NAK. [position] must be valid.
+     */
+    suspend fun syncTime(destNum: Int, position: ModelPosition, timeout: Duration): TimeSyncResult
 
     /** Sets a fixed position for a node, or throws if the outbound queue rejects the admin command. */
     suspend fun setFixedPosition(destNum: Int, pos: ModelPosition)

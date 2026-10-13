@@ -765,4 +765,13 @@ Estos datos de ubicación pueden ser utilizados para fines como aparecer en un m
     <string name="wind">Viento</string>
     <!-- WRITE -->
     <string name="you">Usted</string>
+    <string name="sync_time">Sincronizar hora</string>
+    <string name="sync_time_description">Envía la hora del teléfono junto con la posición de tu nodo. La marca confirma la entrega, no que el nodo aplicó la hora.</string>
+    <string name="sync_time_sending">Enviando…</string>
+    <string name="sync_time_synced">Hora sincronizada</string>
+    <string name="sync_time_failed">Error: %1$s</string>
+    <string name="sync_time_timed_out">Sin confirmación (tiempo agotado)</string>
+    <string name="sync_time_not_sent">No enviado: radio desconectada o cola llena</string>
+    <string name="sync_time_no_position">Tu nodo no tiene una posición válida</string>
+    <string name="sync_time_location_disabled">Compartir ubicación está desactivado</string>
 </resources>

@@ -24,9 +24,11 @@ import org.meshtastic.core.repository.AwaitedSendResult
 import org.meshtastic.core.repository.AwaitedSendStatus
 import org.meshtastic.core.repository.CommandSender
 import org.meshtastic.core.repository.PacketQueueRejectedException
+import org.meshtastic.core.repository.TimeSyncResult
 import org.meshtastic.proto.AdminMessage
 import org.meshtastic.proto.ChannelSet
 import org.meshtastic.proto.LocalConfig
+import kotlin.time.Duration
 
 /** Shared recording [CommandSender] fake for tests that do not need transport behavior. */
 @Suppress("TooManyFunctions")
@@ -172,6 +174,13 @@ class FakeCommandSender :
 
     override suspend fun requestPosition(destNum: Int, currentPosition: Position) {
         failCommandIfConfigured()
+    }
+
+    var syncTimeResult: TimeSyncResult = TimeSyncResult.Synced
+
+    override suspend fun syncTime(destNum: Int, position: Position, timeout: Duration): TimeSyncResult {
+        failCommandIfConfigured()
+        return syncTimeResult
     }
 
     override suspend fun setFixedPosition(destNum: Int, pos: Position) {

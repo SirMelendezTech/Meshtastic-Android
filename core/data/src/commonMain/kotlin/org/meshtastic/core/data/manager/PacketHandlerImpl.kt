@@ -25,7 +25,11 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Mutex
@@ -53,6 +57,7 @@ import org.meshtastic.core.repository.PacketRepository
 import org.meshtastic.core.repository.PersistedPacketId
 import org.meshtastic.core.repository.PersistedReactionId
 import org.meshtastic.core.repository.RadioInterfaceService
+import org.meshtastic.core.repository.RoutingResult
 import org.meshtastic.proto.FromRadio
 import org.meshtastic.proto.MeshPacket
 import org.meshtastic.proto.QueueStatus
@@ -79,6 +84,9 @@ class PacketHandlerImpl(
 
         /** Routing acknowledgements traverse the mesh and need a larger budget than the local queue response. */
         internal val ROUTING_RESPONSE_TIMEOUT = 30.seconds
+
+        /** Routing results are dispatched without suspending; a slow subscriber loses the oldest, not the newest. */
+        private const val ROUTING_RESULT_BUFFER = 64
         private val PERSISTED_STATUS_WAIT = 1.seconds
         private val PERSISTED_STATUS_SHUTDOWN_WAIT = 150.milliseconds
         internal val PERSISTED_STATUS_RETRY_DELAY = 100.milliseconds
@@ -196,6 +204,17 @@ class PacketHandlerImpl(
     }
 
     private val queueResponse = mutableMapOf<Int, PendingResponse>()
+
+    private val _routingResults =
+        MutableSharedFlow<RoutingResult>(
+            extraBufferCapacity = ROUTING_RESULT_BUFFER,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
+    override val routingResults: Flow<RoutingResult> = _routingResults.asSharedFlow()
+
+    override fun publishRoutingResult(result: RoutingResult) {
+        _routingResults.tryEmit(result)
+    }
 
     private val timeoutMutex = Mutex()
     private val sendAckTimeoutJobs = mutableMapOf<PersistedStatusTarget, Job>()

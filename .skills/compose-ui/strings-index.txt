@@ -1784,6 +1784,16 @@ supported_by_maker
 swipe_action_delete
 swipe_action_mute
 swipe_action_unmute
+### SYNC ###
+sync_time
+sync_time_description
+sync_time_failed
+sync_time_location_disabled
+sync_time_no_position
+sync_time_not_sent
+sync_time_sending
+sync_time_synced
+sync_time_timed_out
 system_settings
 ### TAK ###
 tak

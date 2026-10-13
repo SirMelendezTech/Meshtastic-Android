@@ -17,6 +17,7 @@
 package org.meshtastic.core.data.manager
 
 import dev.mokkery.MockMode
+import dev.mokkery.answering.calls
 import dev.mokkery.answering.returns
 import dev.mokkery.every
 import dev.mokkery.everySuspend
@@ -27,9 +28,11 @@ import dev.mokkery.mock
 import dev.mokkery.verify
 import dev.mokkery.verify.VerifyMode.Companion.exactly
 import dev.mokkery.verifySuspend
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
 import okio.ByteString
 import okio.ByteString.Companion.encodeUtf8
@@ -47,7 +50,9 @@ import org.meshtastic.core.repository.NodeManager
 import org.meshtastic.core.repository.PacketHandler
 import org.meshtastic.core.repository.PacketQueueRejectedException
 import org.meshtastic.core.repository.RadioConfigRepository
+import org.meshtastic.core.repository.RoutingResult
 import org.meshtastic.core.repository.SessionManager
+import org.meshtastic.core.repository.TimeSyncResult
 import org.meshtastic.core.repository.TracerouteHandler
 import org.meshtastic.proto.AdminMessage
 import org.meshtastic.proto.ChannelSet
@@ -55,6 +60,7 @@ import org.meshtastic.proto.LocalConfig
 import org.meshtastic.proto.MeshPacket
 import org.meshtastic.proto.NeighborInfo
 import org.meshtastic.proto.PortNum
+import org.meshtastic.proto.Routing
 import org.meshtastic.proto.ToRadio
 import org.meshtastic.proto.User
 import kotlin.test.BeforeTest
@@ -64,6 +70,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 @Suppress("LargeClass")
 class CommandSenderImplTest {
@@ -527,6 +534,112 @@ class CommandSenderImplTest {
         assertEquals(30, sent.altitude)
     }
 
+    // --- syncTime ---
+
+    private val routingResults = MutableSharedFlow<RoutingResult>(extraBufferCapacity = 8)
+
+    /** Answers every sent packet with [replies] for that packet's ID, as the routing handler would. */
+    private fun answerSendsWith(packets: MutableList<MeshPacket>, vararg replies: (Int) -> RoutingResult) {
+        every { packetHandler.routingResults } returns routingResults
+        everySuspend { packetHandler.sendToRadio(any<MeshPacket>()) } calls
+            { call ->
+                val packet = call.arg<MeshPacket>(0)
+                packets += packet
+                replies.forEach { routingResults.tryEmit(it(packet.id)) }
+                true
+            }
+    }
+
+    @Test
+    fun syncTime_sendsPositionThatFirmwareAcceptsAsTime() = runTest {
+        val packets = mutableListOf<MeshPacket>()
+        answerSendsWith(packets, { id -> RoutingResult(id, DEST_NODE, 0) })
+        every { nodeManager.nodeDBbyNodeNum } returns mapOf(DEST_NODE to Node(num = DEST_NODE, channel = 3))
+
+        commandSender.syncTime(DEST_NODE, Position(1.0, 2.0, 30), SYNC_TIMEOUT)
+
+        val packet = packets.single()
+        assertEquals(DEST_NODE, packet.to)
+        assertEquals(0, packet.channel)
+        assertTrue(packet.want_ack)
+        assertFalse(packet.pki_encrypted)
+        val decoded = requireNotNull(packet.decoded)
+        assertEquals(PortNum.POSITION_APP, decoded.portnum)
+        assertFalse(decoded.want_response)
+        val sent = org.meshtastic.proto.Position.ADAPTER.decode(decoded.payload)
+        assertEquals(org.meshtastic.proto.Position.LocSource.LOC_EXTERNAL, sent.location_source)
+        assertEquals(10_000_000, sent.latitude_i)
+        assertEquals(20_000_000, sent.longitude_i)
+        assertEquals(30, sent.altitude)
+        assertNotEquals(0, sent.time)
+    }
+
+    @Test
+    fun syncTime_refusesAnInvalidPosition() = runTest {
+        assertFailsWith<IllegalArgumentException> {
+            commandSender.syncTime(DEST_NODE, Position(0.0, 0.0, 0), SYNC_TIMEOUT)
+        }
+        verifySuspend(exactly(0)) { packetHandler.sendToRadio(any<MeshPacket>()) }
+    }
+
+    @Test
+    fun syncTime_isSyncedOnTheDestinationsAck() = runTest {
+        answerSendsWith(mutableListOf(), { id -> RoutingResult(id, DEST_NODE, 0) })
+
+        assertEquals(TimeSyncResult.Synced, commandSender.syncTime(DEST_NODE, Position(1.0, 2.0, 30), SYNC_TIMEOUT))
+    }
+
+    @Test
+    fun syncTime_ignoresAcksFromOtherNodesAndOtherPackets() = runTest {
+        answerSendsWith(
+            mutableListOf(),
+            { id -> RoutingResult(id, MY_NODE_NUM, 0) },
+            { id -> RoutingResult(id + 1, DEST_NODE, 0) },
+        )
+
+        assertEquals(TimeSyncResult.TimedOut, commandSender.syncTime(DEST_NODE, Position(1.0, 2.0, 30), SYNC_TIMEOUT))
+    }
+
+    @Test
+    fun syncTime_relayAckThenDestinationAckIsSynced() = runTest {
+        answerSendsWith(
+            mutableListOf(),
+            { id -> RoutingResult(id, MY_NODE_NUM, 0) },
+            { id -> RoutingResult(id, DEST_NODE, 0) },
+        )
+
+        assertEquals(TimeSyncResult.Synced, commandSender.syncTime(DEST_NODE, Position(1.0, 2.0, 30), SYNC_TIMEOUT))
+    }
+
+    @Test
+    fun syncTime_reportsNakFromAnyNode() = runTest {
+        val noRoute = Routing.Error.NO_ROUTE.value
+        answerSendsWith(mutableListOf(), { id -> RoutingResult(id, MY_NODE_NUM, noRoute) })
+
+        assertEquals(
+            TimeSyncResult.Nak(noRoute),
+            commandSender.syncTime(DEST_NODE, Position(1.0, 2.0, 30), SYNC_TIMEOUT),
+        )
+    }
+
+    @Test
+    fun syncTime_timesOutWithoutAnAck() = runTest {
+        answerSendsWith(mutableListOf())
+
+        val result = commandSender.syncTime(DEST_NODE, Position(1.0, 2.0, 30), SYNC_TIMEOUT)
+
+        assertEquals(TimeSyncResult.TimedOut, result)
+        assertEquals(SYNC_TIMEOUT.inWholeMilliseconds, currentTime)
+    }
+
+    @Test
+    fun syncTime_reportsNotSentWhenTheQueueRejects() = runTest {
+        every { packetHandler.routingResults } returns routingResults
+        everySuspend { packetHandler.sendToRadio(any<MeshPacket>()) } returns false
+
+        assertEquals(TimeSyncResult.NotSent, commandSender.syncTime(DEST_NODE, Position(1.0, 2.0, 30), SYNC_TIMEOUT))
+    }
+
     // --- sendPosition ---
 
     @Test
@@ -664,5 +777,6 @@ class CommandSenderImplTest {
     companion object {
         private const val MY_NODE_NUM = 100
         private const val DEST_NODE = 200
+        private val SYNC_TIMEOUT = 60.seconds
     }
 }

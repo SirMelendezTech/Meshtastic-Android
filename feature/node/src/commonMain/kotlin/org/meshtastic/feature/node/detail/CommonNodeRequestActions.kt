@@ -17,11 +17,15 @@
 package org.meshtastic.feature.node.detail
 
 import co.touchlab.kermit.Logger
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import org.koin.core.annotation.Single
+import org.meshtastic.core.common.di.ApplicationCoroutineScope
 import org.meshtastic.core.common.util.nowMillis
 import org.meshtastic.core.model.Position
 import org.meshtastic.core.model.TelemetryType
@@ -29,6 +33,7 @@ import org.meshtastic.core.repository.LocalNodeUnavailableException
 import org.meshtastic.core.repository.PacketQueueRejectedException
 import org.meshtastic.core.repository.PlatformAnalytics
 import org.meshtastic.core.repository.RadioController
+import org.meshtastic.core.repository.TimeSyncResult
 import org.meshtastic.core.resources.Res
 import org.meshtastic.core.resources.UiText
 import org.meshtastic.core.resources.neighbor_info
@@ -44,6 +49,10 @@ import org.meshtastic.core.resources.requesting_from
 import org.meshtastic.core.resources.traceroute
 import org.meshtastic.core.resources.user_info
 import org.meshtastic.core.ui.util.SnackbarManager
+import kotlin.time.Duration.Companion.seconds
+
+/** How long a finished "Sync time" result stays on screen before the action returns to idle. */
+private val SYNC_TIME_RESULT_VISIBLE = 30.seconds
 
 @Single(binds = [NodeRequestActions::class])
 class CommonNodeRequestActions
@@ -51,6 +60,7 @@ constructor(
     private val radioController: RadioController,
     private val snackbarManager: SnackbarManager,
     private val analytics: PlatformAnalytics,
+    private val applicationScope: ApplicationCoroutineScope,
     private val resolveUiText: suspend (UiText) -> String = { it.resolve() },
 ) : NodeRequestActions {
 
@@ -59,6 +69,9 @@ constructor(
 
     private val _lastRequestNeighborTimes = MutableStateFlow<Map<Int, Long>>(emptyMap())
     override val lastRequestNeighborTimes: StateFlow<Map<Int, Long>> = _lastRequestNeighborTimes.asStateFlow()
+
+    private val _syncTimeStates = MutableStateFlow<Map<Int, SyncTimeState>>(emptyMap())
+    override val syncTimeStates: StateFlow<Map<Int, SyncTimeState>> = _syncTimeStates.asStateFlow()
 
     private suspend fun showFeedback(text: UiText) {
         snackbarManager.showSnackbar(message = resolveUiText(text))
@@ -119,6 +132,43 @@ constructor(
             }
 
         showFeedback(UiText.Resource(Res.string.requesting_from, typeRes, longName))
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    override fun syncTime(destNum: Int) {
+        // Atomic check-and-set so a double tap cannot send two packets.
+        while (true) {
+            val current = _syncTimeStates.value
+            if (current[destNum] is SyncTimeState.Sending) return
+            if (_syncTimeStates.compareAndSet(current, current + (destNum to SyncTimeState.Sending))) break
+        }
+        // The app scope lets the ACK wait outlive the screen; the result is still there when the user comes back.
+        applicationScope.launch {
+            Logger.i { "Syncing time to '$destNum'" }
+            val result =
+                try {
+                    radioController.syncTime(destNum)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Logger.w(e) { "Time sync to '$destNum' failed to send" }
+                    TimeSyncResult.NotSent
+                }
+            analytics.trackAction("time_sync", mapOf("result" to result.analyticsName()))
+            val finished = SyncTimeState.Finished(result)
+            _syncTimeStates.update { it + (destNum to finished) }
+            delay(SYNC_TIME_RESULT_VISIBLE)
+            // A newer attempt may have replaced this result; only clear our own.
+            _syncTimeStates.update { states -> if (states[destNum] === finished) states - destNum else states }
+        }
+    }
+
+    private fun TimeSyncResult.analyticsName(): String = when (this) {
+        TimeSyncResult.Synced -> "synced"
+        is TimeSyncResult.Nak -> "nak"
+        TimeSyncResult.TimedOut -> "timed_out"
+        TimeSyncResult.NotSent -> "not_sent"
+        is TimeSyncResult.Blocked -> "blocked"
     }
 
     override suspend fun requestTraceroute(destNum: Int, longName: String) = runRequest {

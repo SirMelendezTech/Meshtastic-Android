@@ -20,8 +20,14 @@ import org.meshtastic.core.model.Position
 import org.meshtastic.core.repository.CommandSender
 import org.meshtastic.core.repository.NodeManager
 import org.meshtastic.core.repository.QueryController
+import org.meshtastic.core.repository.TimeSyncBlocker
+import org.meshtastic.core.repository.TimeSyncResult
 import org.meshtastic.core.repository.UiPrefs
 import org.meshtastic.proto.AdminMessage
+import kotlin.time.Duration.Companion.seconds
+
+/** How long a time sync waits for the destination's routing ACK before reporting a timeout. */
+private val SYNC_TIME_ACK_TIMEOUT = 60.seconds
 
 /**
  * [QueryController] implementation: position, traceroute, telemetry, user info, and metadata "pull" queries.
@@ -57,6 +63,27 @@ internal class QueryControllerImpl(
             }
         commandSender.requestPosition(destNum, resolvedPosition)
     }
+
+    override fun syncTimeBlocker(destNum: Int): TimeSyncBlocker? = when {
+        destNum == nodeManager.myNodeNum.value -> TimeSyncBlocker.OWN_NODE
+        !uiPrefs.shouldProvideNodeLocation(myNodeNum).value -> TimeSyncBlocker.LOCATION_SHARING_DISABLED
+        ourValidPosition() == null -> TimeSyncBlocker.NO_VALID_POSITION
+        else -> null
+    }
+
+    override suspend fun syncTime(destNum: Int): TimeSyncResult {
+        // Our radio applies the outgoing position as its own, so a time sync always carries our real coordinates.
+        val position = ourValidPosition()
+        val blocker = syncTimeBlocker(destNum)
+        return when {
+            blocker != null -> TimeSyncResult.Blocked(blocker)
+            position == null -> TimeSyncResult.Blocked(TimeSyncBlocker.NO_VALID_POSITION)
+            else -> commandSender.syncTime(destNum, position, SYNC_TIME_ACK_TIMEOUT)
+        }
+    }
+
+    private fun ourValidPosition(): Position? =
+        nodeManager.nodeDBbyNodeNum[myNodeNum]?.position?.let { Position(it) }?.takeIf { it.isValid() }
 
     override suspend fun requestUserInfo(destNum: Int) {
         if (destNum != nodeManager.myNodeNum.value) {
