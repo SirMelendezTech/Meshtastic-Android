@@ -40,7 +40,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.compose.resources.vectorResource
+import org.koin.compose.viewmodel.koinViewModel
 import org.meshtastic.core.model.Node
+import org.meshtastic.core.model.NodeAddress
 import org.meshtastic.core.resources.Res
 import org.meshtastic.core.resources.administration
 import org.meshtastic.core.resources.preserve_favorites
@@ -51,16 +53,23 @@ import org.meshtastic.feature.settings.component.ExpressiveSection
 import org.meshtastic.feature.settings.radio.AdminRoute
 import org.meshtastic.feature.settings.radio.RadioConfigState
 import org.meshtastic.feature.settings.radio.RadioConfigViewModel
+import org.meshtastic.feature.settings.radio.RemoteFavoriteViewModel
 import org.meshtastic.feature.settings.radio.ResponseState
 import org.meshtastic.feature.settings.radio.component.LoadingOverlay
 import org.meshtastic.feature.settings.radio.component.PacketResponseStateDialog
+import org.meshtastic.feature.settings.radio.component.RemoteFavoriteSection
 import org.meshtastic.feature.settings.radio.component.ShutdownConfirmationDialog
 import org.meshtastic.feature.settings.radio.component.WarningDialog
 
 @Composable
-fun AdministrationScreen(viewModel: RadioConfigViewModel, onBack: () -> Unit) {
+fun AdministrationScreen(
+    viewModel: RadioConfigViewModel,
+    onBack: () -> Unit,
+    remoteFavoriteViewModel: RemoteFavoriteViewModel = koinViewModel(),
+) {
     val state by viewModel.radioConfigState.collectAsStateWithLifecycle()
     val destNode by viewModel.destNode.collectAsStateWithLifecycle()
+    val remoteFavoriteState by remoteFavoriteViewModel.state.collectAsStateWithLifecycle()
     val enabled = state.connected && !state.responseState.isWaiting()
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -93,6 +102,21 @@ fun AdministrationScreen(viewModel: RadioConfigViewModel, onBack: () -> Unit) {
                     titleColor = MaterialTheme.colorScheme.error,
                 ) {
                     AdminRouteItems(viewModel = viewModel, enabled = enabled, state = state, destNode = destNode)
+                }
+
+                val remote = destNode
+                if (!state.isLocal && remote != null) {
+                    RemoteFavoriteSection(
+                        state = remoteFavoriteState,
+                        remoteName = remote.user.long_name.ifBlank { NodeAddress.numToDefaultId(remote.num) },
+                        enabled = enabled,
+                        onInputChange = remoteFavoriteViewModel::onInputChange,
+                        onSubmit = { remoteFavoriteViewModel.submit(remote.num) },
+                        onChooseCandidate = remoteFavoriteViewModel::chooseCandidate,
+                        onDismissCandidates = remoteFavoriteViewModel::dismissCandidates,
+                        onConfirm = { remoteFavoriteViewModel.confirm(remote.num) },
+                        onCancelConfirmation = remoteFavoriteViewModel::cancelConfirmation,
+                    )
                 }
             }
         }
