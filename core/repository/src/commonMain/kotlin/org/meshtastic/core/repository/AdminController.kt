@@ -22,6 +22,7 @@ import org.meshtastic.proto.Channel
 import org.meshtastic.proto.Config
 import org.meshtastic.proto.HamParameters
 import org.meshtastic.proto.ModuleConfig
+import org.meshtastic.proto.SharedContact
 import org.meshtastic.proto.User
 
 /**
@@ -95,6 +96,20 @@ interface AdminController {
      * an admin response (the routing ACK confirms delivery).
      */
     suspend fun setTime(destNum: Int, packetId: Int)
+
+    /**
+     * Stores [contact] in [destNum]'s NodeDB via `AdminMessage.add_contact` and waits for the routing ACK/NAK.
+     *
+     * Firmware writes the contact's public key unconditionally, so callers must not send a keyless contact for a node
+     * whose key [destNum] may already hold.
+     */
+    suspend fun addContactOnNode(destNum: Int, contact: SharedContact): AwaitedSendStatus
+
+    /**
+     * Marks [nodeNum] as a favorite in [destNum]'s NodeDB via `AdminMessage.set_favorite_node` and waits for the
+     * routing ACK/NAK. Unlike [NodeController.setFavorite], this never touches the phone's own node database.
+     */
+    suspend fun setFavoriteOnNode(destNum: Int, nodeNum: Int): AwaitedSendStatus
 
     // ── Remote queries ──────────────────────────────────────────────────────
 

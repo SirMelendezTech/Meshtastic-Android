@@ -49,6 +49,7 @@ import org.meshtastic.proto.Config
 import org.meshtastic.proto.HamParameters
 import org.meshtastic.proto.ModuleConfig
 import org.meshtastic.proto.OTAMode
+import org.meshtastic.proto.SharedContact
 import org.meshtastic.proto.User
 import kotlin.time.Duration.Companion.seconds
 
@@ -226,6 +227,22 @@ internal class AdminControllerImpl(
         commandSender.sendAdmin(destNum, packetId) {
             AdminMessage.Builder().also { wb -> wb.set_time_only = nowSeconds.toInt() }.build()
         }
+    }
+
+    override suspend fun addContactOnNode(destNum: Int, contact: SharedContact): AwaitedSendStatus {
+        Logger.i { "Add contact ${contact.node_num} requested on node $destNum" }
+        return commandSender
+            .sendAdminAwaitResult(destNum) { AdminMessage.Builder().also { wb -> wb.add_contact = contact }.build() }
+            .status
+    }
+
+    override suspend fun setFavoriteOnNode(destNum: Int, nodeNum: Int): AwaitedSendStatus {
+        Logger.i { "Set favorite $nodeNum requested on node $destNum" }
+        return commandSender
+            .sendAdminAwaitResult(destNum) {
+                AdminMessage.Builder().also { wb -> wb.set_favorite_node = nodeNum }.build()
+            }
+            .status
     }
 
     override suspend fun getCannedMessages(destNum: Int, packetId: Int) {

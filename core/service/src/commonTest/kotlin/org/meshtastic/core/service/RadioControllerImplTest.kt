@@ -28,6 +28,7 @@ import dev.mokkery.mock
 import dev.mokkery.verify
 import dev.mokkery.verify.VerifyMode.Companion.atLeast
 import dev.mokkery.verify.VerifyMode.Companion.exactly
+import dev.mokkery.verify.VerifyMode.Companion.not
 import dev.mokkery.verifySuspend
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -911,6 +912,54 @@ class RadioControllerImplTest {
         // The phone's current time is sent; assert it is populated and a plausible recent epoch (after 2020).
         val setTime = sentMessage?.set_time_only
         assertTrue(setTime != null && setTime > 1_577_836_800)
+    }
+
+    @Test
+    fun addContactOnNodeSendsAddContactToDestinationAndReturnsRoutingStatus() = runTest {
+        val controller = createController(scope = backgroundScope)
+        var sentDest: Int? = null
+        var sentMessage: AdminMessage? = null
+        everySuspend { commandSender.sendAdminAwaitResult(any(), any(), any(), any()) } calls
+            {
+                sentDest = it.args[0] as Int
+                @Suppress("UNCHECKED_CAST")
+                sentMessage = (it.args[3] as () -> AdminMessage)()
+                dispatchedSendResult(AwaitedSendStatus.RADIO_REJECTED)
+            }
+        val contact =
+            SharedContact.Builder()
+                .also { wb ->
+                    wb.node_num = 202
+                    wb.user = User.Builder().also { it.short_name = "PR01" }.build()
+                }
+                .build()
+
+        val status = controller.addContactOnNode(destNum = 101, contact = contact)
+
+        assertEquals(101, sentDest)
+        assertEquals(contact, sentMessage?.add_contact)
+        assertEquals(AwaitedSendStatus.RADIO_REJECTED, status)
+    }
+
+    @Test
+    fun setFavoriteOnNodeSendsSetFavoriteToDestinationWithoutTouchingLocalNode() = runTest {
+        val controller = createController(scope = backgroundScope)
+        var sentDest: Int? = null
+        var sentMessage: AdminMessage? = null
+        everySuspend { commandSender.sendAdminAwaitResult(any(), any(), any(), any()) } calls
+            {
+                sentDest = it.args[0] as Int
+                @Suppress("UNCHECKED_CAST")
+                sentMessage = (it.args[3] as () -> AdminMessage)()
+                acceptedSendResult()
+            }
+
+        val status = controller.setFavoriteOnNode(destNum = 101, nodeNum = 202)
+
+        assertEquals(101, sentDest)
+        assertEquals(202, sentMessage?.set_favorite_node)
+        assertEquals(AwaitedSendStatus.ACCEPTED, status)
+        verify(not) { nodeManager.updateNode(any(), any(), any()) }
     }
 
     @Test

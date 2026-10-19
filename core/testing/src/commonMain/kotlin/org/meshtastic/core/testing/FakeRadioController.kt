@@ -24,6 +24,7 @@ import org.meshtastic.core.model.ConnectionState
 import org.meshtastic.core.model.DataPacket
 import org.meshtastic.core.model.Position
 import org.meshtastic.core.repository.AdminEditScope
+import org.meshtastic.core.repository.AwaitedSendStatus
 import org.meshtastic.core.repository.ConnectionStateHolder
 import org.meshtastic.core.repository.EditSettingsTransactionException
 import org.meshtastic.core.repository.PacketQueueRejectedException
@@ -33,6 +34,7 @@ import org.meshtastic.proto.ClientNotification
 import org.meshtastic.proto.Config
 import org.meshtastic.proto.HamParameters
 import org.meshtastic.proto.ModuleConfig
+import org.meshtastic.proto.SharedContact
 import org.meshtastic.proto.User
 
 /**
@@ -189,6 +191,10 @@ class FakeRadioController :
             favoritedNodes.clear()
             sentSharedContacts.clear()
             factoryResetCalls.clear()
+            remoteContactCalls.clear()
+            remoteFavoriteCalls.clear()
+            addContactOnNodeStatus = AwaitedSendStatus.ACCEPTED
+            setFavoriteOnNodeStatus = AwaitedSendStatus.ACCEPTED
             configWrites.clear()
             channelWrites.clear()
             settingsOperations.clear()
@@ -248,7 +254,7 @@ class FakeRadioController :
 
     override suspend fun sendReaction(emoji: String, replyId: Int, contactKey: String) {}
 
-    override suspend fun importContact(contact: org.meshtastic.proto.SharedContact) {}
+    override suspend fun importContact(contact: SharedContact) {}
 
     override suspend fun refreshMetadata(destNum: Int) {}
 
@@ -331,6 +337,28 @@ class FakeRadioController :
     override suspend fun setCannedMessages(destNum: Int, messages: String) {}
 
     override suspend fun setTime(destNum: Int, packetId: Int) {}
+
+    /** Ordered `(destNum, contact)` pairs from [addContactOnNode]. */
+    val remoteContactCalls = mutableListOf<Pair<Int, SharedContact>>()
+
+    /** Ordered `(destNum, nodeNum)` pairs from [setFavoriteOnNode]. */
+    val remoteFavoriteCalls = mutableListOf<Pair<Int, Int>>()
+
+    /** Result returned by [addContactOnNode]. */
+    var addContactOnNodeStatus: AwaitedSendStatus = AwaitedSendStatus.ACCEPTED
+
+    /** Result returned by [setFavoriteOnNode]. */
+    var setFavoriteOnNodeStatus: AwaitedSendStatus = AwaitedSendStatus.ACCEPTED
+
+    override suspend fun addContactOnNode(destNum: Int, contact: SharedContact): AwaitedSendStatus {
+        remoteContactCalls += destNum to contact
+        return addContactOnNodeStatus
+    }
+
+    override suspend fun setFavoriteOnNode(destNum: Int, nodeNum: Int): AwaitedSendStatus {
+        remoteFavoriteCalls += destNum to nodeNum
+        return setFavoriteOnNodeStatus
+    }
 
     override suspend fun getOwner(destNum: Int, packetId: Int) {}
 
