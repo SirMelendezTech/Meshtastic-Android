@@ -759,4 +759,23 @@ Estos datos de ubicación pueden ser utilizados para fines como aparecer en un m
     <string name="wind">Viento</string>
     <!-- WRITE -->
     <string name="you">Usted</string>
+    <string name="remote_favorite_title">Favoritear nodo en este remoto</string>
+    <string name="remote_favorite_description">Escribe un short name o ID de nodo (!a1b2c3d4). Este remoto lo guarda como favorito, para que la política zero-hop de favoritos aplique entre nodos de infraestructura.</string>
+    <string name="remote_favorite_input_label">Short name o !id</string>
+    <string name="remote_favorite_action">Favoritear</string>
+    <string name="remote_favorite_not_found">No conozco ningún nodo con short name \'%1$s\'. Escribe su ID !xxxxxxxx</string>
+    <string name="remote_favorite_is_destination">Un nodo no puede favoritearse a sí mismo</string>
+    <string name="remote_favorite_choose_title">Varios nodos usan \'%1$s\'</string>
+    <string name="remote_favorite_confirm">¿Favoritear %1$s en %2$s?</string>
+    <string name="remote_favorite_step_add_contact">Compartir contacto</string>
+    <string name="remote_favorite_step_set_favorite">Marcar favorito</string>
+    <string name="remote_favorite_state_pending">En espera</string>
+    <string name="remote_favorite_state_sent">Enviado, esperando ACK…</string>
+    <string name="remote_favorite_state_ack">ACK</string>
+    <string name="remote_favorite_state_error">Error: %1$s</string>
+    <string name="remote_favorite_error_nak">rechazado (NAK)</string>
+    <string name="remote_favorite_error_timeout">sin respuesta (tiempo agotado)</string>
+    <string name="remote_favorite_error_not_sent">no enviado: radio desconectada o cola llena</string>
+    <string name="remote_favorite_skipped_unknown">Omitido: el nodo no está en el NodeDB del teléfono</string>
+    <string name="remote_favorite_skipped_no_key">Omitido: no se conoce la clave pública de este nodo</string>
 </resources>
